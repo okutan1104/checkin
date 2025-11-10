@@ -23,7 +23,6 @@ canvas{display:block;margin:1rem auto;}
 <h1>会員制QRチェックイン</h1>
 <div class="container">
 
-<h2>チェックイン方法切替</h2>
 <div class="tab-buttons">
   <button id="cameraTabBtn">カメラでスキャン</button>
   <button id="imageTabBtn">画像でスキャン</button>
@@ -52,10 +51,12 @@ canvas{display:block;margin:1rem auto;}
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
 <script>
-const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbyXE45-oFrH5JmhSMuW2iitVcW2VuBorR49hD8yIrVPd59HqxP7zttq2UJIQ8bTcbF9/exec";
+// あなたのデプロイ済GAS URL
+const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycby_Brj_2fmQ5fvNI7Y_lSMPwf_BEZ-XjQEI4bq8hvUdJCKz1JK5TUBFpqIQOlD4A17d/exec";
+
 function log(t){document.getElementById("log").textContent += t + "\n";}
 
-// === タブ切替 ===
+// タブ切替
 const cameraTabBtn = document.getElementById("cameraTabBtn");
 const imageTabBtn = document.getElementById("imageTabBtn");
 const cameraTab = document.getElementById("cameraTab");
@@ -63,11 +64,9 @@ const imageTab = document.getElementById("imageTab");
 
 cameraTabBtn.addEventListener("click",()=>{cameraTab.classList.add("active"); imageTab.classList.remove("active");});
 imageTabBtn.addEventListener("click",()=>{cameraTab.classList.remove("active"); imageTab.classList.add("active");});
-
-// 初期タブはカメラ
 cameraTab.classList.add("active");
 
-// === QR生成 ===
+// QR生成
 function generateQR(){
   const id = memberId.value.trim();
   const name = memberName.value.trim();
@@ -78,31 +77,29 @@ function generateQR(){
   log("✅ QR生成: " + json);
 }
 
-// === Googleシート送信（重複チェック含む） ===
+// 送信（重複チェック対応）
 async function sendToSheet(entry){
   try{
-    // まずGETで既存データ取得
     const resGet = await fetch(GOOGLE_SHEET_URL + "?action=get");
     const existing = await resGet.json();
     if(existing.some(r=>r.member_id===entry.member_id)){
-      statusCam.textContent = `⚠️ 既にチェックイン済み: ${entry.member_id}`;
+      document.getElementById("statusCam").textContent = `⚠️ 既にチェックイン済み: ${entry.member_id}`;
       log(`⚠️ ${entry.member_id} は既にチェックイン済み`);
       return;
     }
-    // 重複なければPOST
     const resPost = await fetch(GOOGLE_SHEET_URL,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify(entry)
     });
     log("📤送信結果: " + await resPost.text());
-    statusCam.textContent = `✅ チェックイン: ${entry.name} (${entry.member_id})`;
+    document.getElementById("statusCam").textContent = `✅ チェックイン: ${entry.name} (${entry.member_id})`;
   }catch(e){
     log("❌ 送信エラー: " + e);
   }
 }
 
-// === カメラ ===
+// カメラ
 const video=document.getElementById("preview");
 const camCanvas=document.createElement("canvas");
 const camCtx=camCanvas.getContext("2d");
@@ -131,7 +128,7 @@ function camTick(){
   requestAnimationFrame(camTick);
 }
 
-// === QR共通処理 ===
+// QR共通処理
 function processQRCode(qrText){
   try{
     const data=JSON.parse(qrText);
@@ -142,7 +139,7 @@ function processQRCode(qrText){
   }
 }
 
-// === 画像スキャン ===
+// 画像スキャン
 const imgCanvas = document.createElement("canvas");
 const imgCtx = imgCanvas.getContext("2d");
 document.getElementById("fileInput").addEventListener("change", function(e){
