@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -7,108 +5,101 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>会員制QRチェックイン</title>
 <style>
-  body {font-family: system-ui; background:#f5f6fa; margin:0; padding:1rem; color:#333;}
-  h1 {text-align:center;}
-  .container {max-width:480px; margin:auto; background:white; border-radius:16px; box-shadow:0 2px 6px rgba(0,0,0,.15); padding:1rem;}
-  input, button, select {width:100%; padding:.6rem; margin:.5rem 0; font-size:1rem;}
-  video {width:100%; border-radius:10px; margin-top:1rem;}
-  #log {font-size:.9rem; margin-top:.5rem; white-space:pre-wrap;}
+body{font-family:system-ui;background:#f5f6fa;margin:0;padding:1rem;color:#333;}
+h1{text-align:center;margin-bottom:1rem;}
+.container{max-width:480px;margin:auto;background:white;border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,.15);padding:1rem;}
+input,button{width:100%;padding:.6rem;margin:.5rem 0;font-size:1rem;}
+button{cursor:pointer;}
+video{width:100%;border-radius:10px;margin-top:1rem;}
+canvas{display:block;margin:1rem auto;}
+#log{font-size:.9rem;margin-top:.5rem;white-space:pre-wrap;}
 </style>
 </head>
 <body>
-<h1>QRチェックイン</h1>
+<h1>会員制QRチェックイン</h1>
 <div class="container">
-  <h2>QRスキャンでチェックイン</h2>
-  <video id="preview"></video>
-  <p id="status">カメラ起動中...</p>
-  <hr>
-  <h3>QRコード発行（会員用）</h3>
-  <input id="memberId" placeholder="会員ID（例：A001）">
-  <input id="memberName" placeholder="氏名（例：山田太郎）">
-  <input id="eventName" placeholder="イベント名（例：秋祭り2025）">
-  <button onclick="generateQR()">QRを生成</button>
-  <canvas id="qrcanvas"></canvas>
-  <div id="log"></div>
+<h2>QRスキャンでチェックイン</h2>
+<video id="preview" autoplay playsinline></video>
+<p id="status">カメラ起動中...</p>
+<hr>
+<h3>会員QR生成</h3>
+<input id="memberId" placeholder="会員ID（例：A001）">
+<input id="memberName" placeholder="氏名（例：山田太郎）">
+<input id="eventName" placeholder="イベント名（例：秋祭り2025）">
+<button onclick="generateQR()">QRを生成</button>
+<canvas id="qrcanvas"></canvas>
+<pre id="log"></pre>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
 <script>
-  // 👇ここに自分のGASのURLを入れてください
-  const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/https://script.google.com/macros/s/AKfycbwZpSx-WqgzkIG3cixzbNvXn1aypJgF19kyQGgiJ1lEq0dajAIchqGkB1WJ7YSjrVPj/exec";
+const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbyXE45-oFrH5JmhSMuW2iitVcW2VuBorR49hD8yIrVPd59HqxP7zttq2UJIQ8bTcbF9/exec";
 
-  async function sendToSheet(entry){
-    try{
-      const res = await fetch(GOOGLE_SHEET_URL, {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify(entry)
-      });
-      const text = await res.text();
-      log(`📤 Google Sheets送信結果: ${text}`);
-    }catch(err){
-      log("❌ 送信エラー: " + err);
-    }
+function log(t){document.getElementById("log").textContent += t + "\n";}
+
+// === QR生成 ===
+function generateQR(){
+  const id = memberId.value.trim();
+  const name = memberName.value.trim();
+  const event = eventName.value.trim();
+  if(!id||!name||!event){alert("全て入力してください");return;}
+  const json = JSON.stringify({id,name,event});
+  new QRious({element:document.getElementById("qrcanvas"),value:json,size:200});
+  log("✅ QR生成: " + json);
+}
+
+// === Googleシート送信 ===
+async function sendToSheet(entry){
+  try{
+    const res = await fetch(GOOGLE_SHEET_URL,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(entry)
+    });
+    log("📤送信結果: " + await res.text());
+  }catch(e){
+    log("❌送信エラー: " + e);
   }
+}
 
-  function log(t){document.getElementById("log").textContent += t + "\n";}
+// === カメラ起動とQR解析 ===
+const video=document.getElementById("preview");
+const canvas=document.createElement("canvas");
+const ctx=canvas.getContext("2d");
 
-  // QR生成
-  function generateQR(){
-    const id = memberId.value.trim();
-    const name = memberName.value.trim();
-    const event = eventName.value.trim();
-    if(!id || !name || !event){alert("全項目を入力してください");return;}
-    const data = JSON.stringify({id,name,event});
-    const qr = new QRious({element:document.getElementById("qrcanvas"),value:data,size:200});
-    log(`✅ QR生成: ${data}`);
-  }
-
-  // カメラ起動とスキャン処理
-  const video = document.getElementById("preview");
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-
-  async function startCamera(){
-    try{
-      const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-      video.srcObject = stream;
-      video.setAttribute("playsinline", true);
-      video.play();
-      requestAnimationFrame(tick);
-      document.getElementById("status").textContent = "📷 スキャン準備完了";
-    }catch(err){
-      document.getElementById("status").textContent = "❌ カメラ起動失敗: " + err;
-    }
-  }
-
-  function tick(){
-    if(video.readyState === video.HAVE_ENOUGH_DATA){
-      canvas.height = video.videoHeight;
-      canvas.width = video.videoWidth;
-      ctx.drawImage(video,0,0,canvas.width,canvas.height);
-      const img = ctx.getImageData(0,0,canvas.width,canvas.height);
-      const code = jsQR(img.data, img.width, img.height);
-      if(code){
-        try{
-          const data = JSON.parse(code.data);
-          const entry = {
-            member_id:data.id,
-            name:data.name,
-            event:data.event,
-            status:"checked_in"
-          };
-          sendToSheet(entry);
-          document.getElementById("status").textContent = `✅ チェックイン成功: ${data.name} (${data.id})`;
-        }catch(e){
-          document.getElementById("status").textContent = "⚠️ 不正なQRです";
-        }
-      }
-    }
+async function startCamera(){
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+    video.srcObject=stream;
+    video.play();
     requestAnimationFrame(tick);
+    status.textContent="📷 カメラ起動成功";
+  }catch(e){
+    status.textContent="❌ カメラ起動失敗: " + e;
   }
+}
 
-  startCamera();
+function tick(){
+  if(video.readyState===video.HAVE_ENOUGH_DATA){
+    canvas.width=video.videoWidth;
+    canvas.height=video.videoHeight;
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+    const img=ctx.getImageData(0,0,canvas.width,canvas.height);
+    const code=jsQR(img.data,img.width,img.height);
+    if(code){
+      try{
+        const data=JSON.parse(code.data);
+        const entry={member_id:data.id,name:data.name,event:data.event,status:"checked_in"};
+        sendToSheet(entry);
+        status.textContent=`✅ チェックイン: ${data.name} (${data.id})`;
+      }catch{status.textContent="⚠️ 不正なQRです";}
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+startCamera();
 </script>
 </body>
 </html>
