@@ -51,12 +51,10 @@ canvas{display:block;margin:1rem auto;}
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
 <script>
-// あなたのデプロイ済GAS URL
 const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycby_Brj_2fmQ5fvNI7Y_lSMPwf_BEZ-XjQEI4bq8hvUdJCKz1JK5TUBFpqIQOlD4A17d/exec";
 
 function log(t){document.getElementById("log").textContent += t + "\n";}
 
-// タブ切替
 const cameraTabBtn = document.getElementById("cameraTabBtn");
 const imageTabBtn = document.getElementById("imageTabBtn");
 const cameraTab = document.getElementById("cameraTab");
@@ -66,7 +64,6 @@ cameraTabBtn.addEventListener("click",()=>{cameraTab.classList.add("active"); im
 imageTabBtn.addEventListener("click",()=>{cameraTab.classList.remove("active"); imageTab.classList.add("active");});
 cameraTab.classList.add("active");
 
-// QR生成
 function generateQR(){
   const id = memberId.value.trim();
   const name = memberName.value.trim();
@@ -77,7 +74,6 @@ function generateQR(){
   log("✅ QR生成: " + json);
 }
 
-// 送信（重複チェック対応）
 async function sendToSheet(entry){
   try{
     const resGet = await fetch(GOOGLE_SHEET_URL + "?action=get");
@@ -87,19 +83,12 @@ async function sendToSheet(entry){
       log(`⚠️ ${entry.member_id} は既にチェックイン済み`);
       return;
     }
-    const resPost = await fetch(GOOGLE_SHEET_URL,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(entry)
-    });
+    const resPost = await fetch(GOOGLE_SHEET_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(entry)});
     log("📤送信結果: " + await resPost.text());
     document.getElementById("statusCam").textContent = `✅ チェックイン: ${entry.name} (${entry.member_id})`;
-  }catch(e){
-    log("❌ 送信エラー: " + e);
-  }
+  }catch(e){log("❌ 送信エラー: " + e);}
 }
 
-// カメラ
 const video=document.getElementById("preview");
 const camCanvas=document.createElement("canvas");
 const camCtx=camCanvas.getContext("2d");
@@ -107,19 +96,14 @@ const camCtx=camCanvas.getContext("2d");
 async function startCamera(){
   try{
     const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-    video.srcObject=stream;
-    video.play();
-    requestAnimationFrame(camTick);
+    video.srcObject=stream; video.play(); requestAnimationFrame(camTick);
     document.getElementById("statusCam").textContent="📷 カメラ起動成功";
-  }catch(e){
-    document.getElementById("statusCam").textContent="❌ カメラ起動失敗: " + e;
-  }
+  }catch(e){document.getElementById("statusCam").textContent="❌ カメラ起動失敗: " + e;}
 }
 
 function camTick(){
   if(video.readyState===video.HAVE_ENOUGH_DATA){
-    camCanvas.width=video.videoWidth;
-    camCanvas.height=video.videoHeight;
+    camCanvas.width=video.videoWidth; camCanvas.height=video.videoHeight;
     camCtx.drawImage(video,0,0,camCanvas.width,camCanvas.height);
     const imgData=camCtx.getImageData(0,0,camCanvas.width,camCanvas.height);
     const code=jsQR(imgData.data,imgData.width,imgData.height);
@@ -128,49 +112,30 @@ function camTick(){
   requestAnimationFrame(camTick);
 }
 
-// QR共通処理
 function processQRCode(qrText){
-  try{
-    const data=JSON.parse(qrText);
-    const entry={member_id:data.id,name:data.name,event:data.event,status:"checked_in"};
-    sendToSheet(entry);
-  }catch{
-    document.getElementById("statusCam").textContent="⚠️ 不正なQRです";
-  }
+  try{const data=JSON.parse(qrText); const entry={member_id:data.id,name:data.name,event:data.event,status:"checked_in"}; sendToSheet(entry);}catch{document.getElementById("statusCam").textContent="⚠️ 不正なQRです";}
 }
 
-// 画像スキャン
 const imgCanvas = document.createElement("canvas");
 const imgCtx = imgCanvas.getContext("2d");
 document.getElementById("fileInput").addEventListener("change", function(e){
-  const file = e.target.files[0];
-  if(!file) return;
+  const file = e.target.files[0]; if(!file) return;
   const reader = new FileReader();
   reader.onload = function() {
     const img = new Image();
     img.onload = function() {
-      imgCanvas.width = img.width;
-      imgCanvas.height = img.height;
-      imgCtx.drawImage(img,0,0);
+      imgCanvas.width = img.width; imgCanvas.height = img.height; imgCtx.drawImage(img,0,0);
       try {
         const imgData = imgCtx.getImageData(0,0,imgCanvas.width,imgCanvas.height);
         const code = jsQR(imgData.data,imgData.width,imgData.height);
-        if(code){
-          processQRCode(code.data);
-          log("✅ 画像からQRスキャン成功");
-        } else {
-          log("⚠️ 画像からQRが見つかりませんでした");
-        }
-      } catch(err){
-        log("❌ 画像処理エラー: " + err);
-      }
+        if(code){processQRCode(code.data); log("✅ 画像からQRスキャン成功");} else {log("⚠️ 画像からQRが見つかりませんでした");}
+      } catch(err){log("❌ 画像処理エラー: " + err);}
     };
     img.src = reader.result;
   };
   reader.readAsDataURL(file);
 });
 
-// カメラ起動
 startCamera();
 </script>
 </body>
