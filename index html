@@ -3,286 +3,129 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>QRチェックイン – 会員制（Google Sheets連携版）</title>
+  <title>会員制 QRチェックイン</title>
   <style>
-    :root { --bg:#f7fafc; --card:#fff; --accent:#2563eb; --muted:#6b7280; }
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
-           margin:0; background:var(--bg); color:#111; }
-    .wrap { max-width:980px; margin:2rem auto; padding:1rem; }
-    header { display:flex; align-items:center; gap:1rem; }
-    h1 { margin:0; font-size:1.25rem; }
-    .grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:1rem; }
-    .card { background:var(--card); padding:1rem; border-radius:10px; box-shadow:0 6px 18px rgba(2,6,23,.06); }
-    label { display:block; margin:0.5rem 0 .25rem; font-size:.9rem; color:var(--muted); }
-    input,select,button,textarea { width:100%; padding:.5rem; border:1px solid #e5e7eb; border-radius:6px;
-                                     font-size:.95rem; }
-    button { cursor:pointer; background:var(--accent); color:#fff; border:none; }
-    .muted { color:var(--muted); font-size:.9rem; }
-    .qrcode-wrap { text-align:center; }
-    #qrcode { display:inline-block; padding:0.5rem; background:#fff; border-radius:8px; }
-    .controls { display:flex; gap:.5rem; margin-top:.5rem; }
-    .controls button { flex:1; }
-    table { width:100%; border-collapse:collapse; margin-top:.5rem; font-size:.9rem; }
-    th,td { padding:.5rem; border-bottom:1px solid #f1f5f9; text-align:left; }
-    .small { font-size:.85rem; }
-    .fullwidth { grid-column:1 / -1; }
-    .notice { font-size:.9rem; color:#065f46; background:#ecfdf5; padding:.5rem; border-radius:6px; }
-    @media (max-width:900px) { .grid { grid-template-columns:1fr; } }
+    body {font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;
+          margin:0;background:#f6f7fb;}
+    .wrap{max-width:960px;margin:auto;padding:1rem;}
+    h1{font-size:1.3rem;margin-bottom:0.3rem;}
+    .tabs{display:flex;gap:.5rem;margin:1rem 0;}
+    .tab{flex:1;text-align:center;background:#e2e8f0;padding:.5rem;border-radius:6px;cursor:pointer;}
+    .tab.active{background:#2563eb;color:#fff;}
+    .card{background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.1);padding:1rem;}
+    input,button{width:100%;padding:.6rem;margin:.3rem 0;border:1px solid #ccc;border-radius:5px;font-size:.95rem;}
+    button{background:#2563eb;color:#fff;border:none;cursor:pointer;}
+    button.stop{background:#ef4444;}
+    video{width:100%;border-radius:8px;background:#000;}
+    textarea{width:100%;height:70px;}
+    table{width:100%;border-collapse:collapse;margin-top:1rem;font-size:.9rem;}
+    th,td{border-bottom:1px solid #eee;padding:.4rem;text-align:left;}
+    #qrcode{margin:auto;padding:10px;}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>QRチェックイン（会員制/Google Sheets 連携）</h1>
-      <div class="muted">会員データ＋QR生成／チェックイン→スプレッドシートに保存</div>
-    </header>
+<div class="wrap">
+  <h1>会員制 QRチェックインシステム（GitHub Pages対応）</h1>
 
-    <div class="grid">
-      <!-- QR生成側 -->
-      <div class="card">
-        <h2 style="margin-top:0">会員 QR を生成</h2>
-        <div class="muted">登録済み会員の名前・ID・イベントを入力して生成します。</div>
-
-        <label for="attendeeName">名前</label>
-        <input id="attendeeName" placeholder="山田 太郎" />
-
-        <label for="attendeeId">会員ID</label>
-        <input id="attendeeId" placeholder="A001" />
-
-        <label for="eventTag">イベント名／タグ</label>
-        <input id="eventTag" placeholder="イベントA" />
-
-        <div style="display:flex; gap:.5rem; margin-top:.5rem">
-          <button id="generateBtn">QR を生成</button>
-          <button id="downloadQrBtn" style="background:#111">PNG 保存</button>
-        </div>
-
-        <div class="qrcode-wrap" style="margin-top:1rem">
-          <div id="qrcode"></div>
-          <div class="muted small">生成した QR を右クリック／長押しで保存できます</div>
-        </div>
-
-        <div style="margin-top:1rem">
-          <label class="small">QR に埋めるデータ（プレビュー）</label>
-          <textarea id="payloadPreview" rows="3" readonly></textarea>
-        </div>
-      </div>
-
-      <!-- スキャン・チェックイン側 -->
-      <div class="card">
-        <h2 style="margin-top:0">チェックイン（スキャン）</h2>
-        <div class="muted">スマホ／PC のカメラで会員 QR を読み取ると、スプレッドシートに送信されます。</div>
-
-        <label>カメラプレビュー</label>
-        <video id="video" playsinline style="width:100%; border-radius:8px; background:#000"></video>
-
-        <div class="controls">
-          <button id="startCam">カメラ開始</button>
-          <button id="stopCam" style="background:#ef4444">停止</button>
-        </div>
-
-        <div style="margin-top:.5rem; display:flex; gap:.5rem">
-          <button id="clearList" style="background:#ef4444">チェックイン履歴削除</button>
-        </div>
-
-        <div style="margin-top:.5rem">
-          <label class="small">直近チェックイン</label>
-          <table id="logTable"><thead><tr><th>時刻</th><th>イベント</th><th>名前</th><th>ID</th><th>状態</th></tr></thead><tbody></tbody></table>
-        </div>
-      </div>
-
-      <!-- 履歴表示（フル幅） -->
-      <div class="card fullwidth">
-        <h2 style="margin-top:0">チェックイン一覧（ブラウザ内保存）</h2>
-        <div class="muted small">ページをリロードしても履歴は残ります。スプレッドシートには「成功／失敗」どちらも送信されます。</div>
-        <div id="listWrap" style="margin-top:.75rem"></div>
-      </div>
-
-      <div class="card fullwidth">
-        <h2 style="margin-top:0">使い方（短く）</h2>
-        <ol>
-          <li>「会員 QR を生成」で名前・会員ID・イベントを入力して QR を作成（会員登録済みであることが前提）</li>
-          <li>別端末で「カメラ開始」を押して QR をスキャン。スキャン成功なら自動でスプレッドシートへ。</li>
-          <li>ログを確認・必要なら履歴削除。QR を印刷して受付に使うことも可能。</li>
-        </ol>
-        <div class="notice" style="margin-top:.5rem">補足：必ずブラウザでカメラ使用を許可してください。HTTPS（またはGitHub Pages）環境でないと動作が制限されることがあります。</div>
-      </div>
-    </div>
+  <div class="tabs">
+    <div class="tab active" id="tab-gen">QR生成</div>
+    <div class="tab" id="tab-scan">チェックイン</div>
   </div>
 
-  <!-- ライブラリ読み込み -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://unpkg.com/qr-scanner/qr-scanner.min.js"></script>
-  <script>
-    // Google Sheets 送信先 URL をここに貼り換えてください
-    const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/【YOUR_SCRIPT_ID】/exec";
+  <div id="page-gen" class="card">
+    <h2>会員QR生成</h2>
+    <input id="name" placeholder="名前（例：山田太郎）">
+    <input id="memberId" placeholder="会員ID（例：A001）">
+    <input id="event" placeholder="イベント名（例：イベントA）">
+    <button id="makeQr">QRを生成</button>
+    <div id="qrcode"></div>
+    <textarea id="qrText" readonly></textarea>
+    <button id="download" style="display:none;">QR画像を保存</button>
+  </div>
 
-    if (window.QrScanner) {
-      QrScanner.WORKER_PATH = 'https://unpkg.com/qr-scanner/qr-scanner-worker.min.js';
-    }
+  <div id="page-scan" class="card" style="display:none;">
+    <h2>チェックイン</h2>
+    <video id="video" playsinline></video>
+    <button id="start">カメラ開始</button>
+    <button id="stop" class="stop">停止</button>
+    <table>
+      <thead><tr><th>時刻</th><th>名前</th><th>ID</th><th>イベント</th></tr></thead>
+      <tbody id="log"></tbody>
+    </table>
+  </div>
+</div>
 
-    function nowIso(){ return new Date().toISOString(); }
-    function uid(){ return Math.random().toString(36).slice(2,9); }
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/qr-scanner/qr-scanner.min.js"></script>
+<script>
+  const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/【あなたのAppsScriptのURL】/exec";
 
-    const STORAGE_KEY = 'qr_checkin_list_v1';
-
-    function loadList(){
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        return raw ? JSON.parse(raw) : [];
-      } catch(e){
-        console.error(e);
-        return [];
-      }
-    }
-    function saveList(list){
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-    }
-
-    // QR生成
-    let qrcodeEl = null;
-    function generatePayload(name, id, tag){
-      // MEMBER|event|name|id|nonce
-      const payload = ['MEMBER', tag||'', name||'', id||'', uid()].join('|');
-      return payload;
-    }
-    function renderQr(text){
-      const container = document.getElementById('qrcode');
-      container.innerHTML = '';
-      qrcodeEl = new QRCode(container, { text, width:220, height:220, correctLevel: QRCode.CorrectLevel.H });
-    }
-
-    document.getElementById('generateBtn').addEventListener('click', () => {
-      const name = document.getElementById('attendeeName').value.trim();
-      const id = document.getElementById('attendeeId').value.trim();
-      const tag = document.getElementById('eventTag').value.trim();
-      if (!name || !id) {
-        alert('名前と会員IDは必須です');
-        return;
-      }
-      const payload = generatePayload(name, id, tag);
-      document.getElementById('payloadPreview').value = payload;
-      renderQr(payload);
+  // タブ切り替え
+  const tabs = document.querySelectorAll('.tab');
+  const pages = {gen: document.getElementById('page-gen'), scan: document.getElementById('page-scan')};
+  tabs.forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      tabs.forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      const id = tab.id === 'tab-gen' ? 'gen' : 'scan';
+      pages.gen.style.display = id==='gen'?'block':'none';
+      pages.scan.style.display = id==='scan'?'block':'none';
     });
+  });
 
-    document.getElementById('downloadQrBtn').addEventListener('click', () => {
-      const container = document.getElementById('qrcode').querySelector('img,canvas');
-      if (!container) { alert('まず QR を生成してください'); return; }
-      if (container.tagName.toLowerCase()==='img') {
-        const url = container.src;
-        const a = document.createElement('a'); a.href = url; a.download='qrcode.png'; a.click();
-      } else {
-        const url = container.toDataURL('image/png');
-        const a = document.createElement('a'); a.href = url; a.download='qrcode.png'; a.click();
-      }
-    });
+  // QR生成
+  document.getElementById('makeQr').onclick = ()=>{
+    const name=document.getElementById('name').value.trim();
+    const id=document.getElementById('memberId').value.trim();
+    const ev=document.getElementById('event').value.trim();
+    if(!name||!id){alert('名前と会員IDを入力してください');return;}
+    const payload=`MEMBER|${ev}|${name}|${id}|${Date.now()}`;
+    document.getElementById('qrText').value=payload;
+    document.getElementById('qrcode').innerHTML='';
+    new QRCode(document.getElementById('qrcode'),{text:payload,width:200,height:200});
+    document.getElementById('download').style.display='block';
+  };
 
-    // チェックイン（スキャン）処    理
-    const videoElem = document.getElementById('video');
-    let scanner = null;
-
-    async function startCamera(){
-      if (!window.QrScanner) { alert('QR スキャナーライブラリ読み込み失敗'); return; }
-      scanner = new QrScanner(videoElem, result => {
-        handleScannedPayload(result);
-      });
-      try {
-        await scanner.start();
-        console.log('camera started');
-      } catch(e) {
-        alert('カメラを開始できませんでした。\\nブラウザの許可を確認してください。\\n' + e);
-      }
+  // QR保存
+  document.getElementById('download').onclick=()=>{
+    const img=document.querySelector('#qrcode img');
+    if(img){
+      const a=document.createElement('a');
+      a.href=img.src;
+      a.download='member_qr.png';
+      a.click();
     }
-    function stopCamera(){
-      if (scanner) { scanner.stop(); scanner.destroy(); scanner = null; }
-    }
-    document.getElementById('startCam').addEventListener('click', () => startCamera());
-    document.getElementById('stopCam').addEventListener('click', () => stopCamera());
+  };
 
-    function parsePayload(text){
-      if (!text) return null;
-      const parts = text.split('|');
-      if (parts[0] !== 'MEMBER') return null;
-      return { tag: parts[1]||'', name: parts[2]||'', id: parts[3]||'', nonce: parts[4]||'' };
-    }
+  // カメラとスキャン
+  const video=document.getElementById('video');
+  let scanner=null;
 
-    async function sendToSheet(entry){
-      try {
-        const res = await fetch(GOOGLE_SHEET_URL, {
-          method: 'POST',
-          headers: { 'Content-Type':'application/json' },
-          body: JSON.stringify(entry)
-        });
-        const txt = await res.text();
-        console.log('Google Sheets 送信:', txt);
-      } catch(e) {
-        console.error('送信エラー:', e);
-      }
-    }
+  document.getElementById('start').onclick=async()=>{
+    if(scanner) return;
+    QrScanner.WORKER_PATH='https://unpkg.com/qr-scanner/qr-scanner-worker.min.js';
+    scanner=new QrScanner(video,result=>handleScan(result));
+    await scanner.start();
+  };
+  document.getElementById('stop').onclick=()=>{if(scanner){scanner.stop();scanner.destroy();scanner=null;}};
 
-    function handleScannedPayload(text){
-      const parsed = parsePayload(text);
-      if (!parsed) { alert('無効な QR です:\n' + text); return; }
+  function handleScan(result){
+    const data=result.data||result;
+    const parts=data.split('|');
+    if(parts[0]!=='MEMBER'){alert('無効なQR');return;}
+    const [_,event,name,id]=parts;
+    const now=new Date().toLocaleString();
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${now}</td><td>${name}</td><td>${id}</td><td>${event}</td>`;
+    document.getElementById('log').prepend(tr);
 
-      const list = loadList();
-      const entryTime = nowIso();
-      const entry = {
-        timestamp: entryTime,
-        member_id: parsed.id,
-        name: parsed.name,
-        event: parsed.tag,
-        status: 'success',
-        nonce: parsed.nonce
-      };
-
-      // 重複チェック（同一 nonce）  
-      if (list.find(it=>it.nonce === parsed.nonce)) {
-        entry.status = 'duplicate';
-        alert('この QR は既にチェックイン済みです（重複）: ' + parsed.name + ' ('+parsed.id+')');
-      } else {
-        alert('✅ チェックイン完了: ' + parsed.name + ' ('+parsed.id+')');
-      }
-
-      list.unshift(entry);
-      saveList(list);
-      refreshUI();
-
-      // スプレッドシートへ送信
-      sendToSheet(entry);
-    }
-
-    function refreshUI(){
-      const list = loadList();
-      const tbody = document.querySelector('#logTable tbody');
-      tbody.innerHTML = '';
-      for (const it of list.slice(0,30)) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${it.timestamp}</td><td>${escapeHtml(it.event)}</td><td>${escapeHtml(it.name)}</td><td>${escapeHtml(it.member_id)}</td><td>${escapeHtml(it.status)}</td>`;
-        tbody.appendChild(tr);
-      }
-      const wrap = document.getElementById('listWrap');
-      if (list.length === 0) {
-        wrap.innerHTML = '<div class="muted">まだチェックインがありません</div>';
-      } else {
-        let html = '<table><thead><tr><th>時刻</th><th>イベント</th><th>名前</th><th>ID</th><th>状態</th></tr></thead><tbody>';
-        for (const it of list) {
-          html += `<tr><td>${it.timestamp}</td><td>${escapeHtml(it.event)}</td><td>${escapeHtml(it.name)}</td><td>${escapeHtml(it.member_id)}</td><td>${escapeHtml(it.status)}</td></tr>`;
-        }
-        html += '</tbody></table>';
-        wrap.innerHTML = html;
-      }
-    }
-
-    function escapeHtml(s){ if(s==null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-    document.getElementById('clearList').addEventListener('click', () => {
-      if (!confirm('全てのチェックイン履歴（ブラウザ内）を削除します。よろしいですか？')) return;
-      localStorage.removeItem(STORAGE_KEY); refreshUI();
-    });
-
-    // 初期描画
-    refreshUI();
-    window.addEventListener('beforeunload', ()=> stopCamera());
-  </script>
+    // Google Sheetsへ送信
+    fetch(GOOGLE_SHEET_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({timestamp:now,name,id,event})
+    }).then(r=>r.text()).then(console.log);
+  }
+</script>
 </body>
 </html>
