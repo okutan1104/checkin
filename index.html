@@ -10,17 +10,34 @@ h1{text-align:center;margin-bottom:1rem;}
 .container{max-width:480px;margin:auto;background:white;border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,.15);padding:1rem;}
 input,button{width:100%;padding:.6rem;margin:.5rem 0;font-size:1rem;}
 button{cursor:pointer;}
-video{width:100%;border-radius:10px;margin-top:1rem;}
+video{width:100%;border-radius:10px;margin-top:1rem;display:block;}
 canvas{display:block;margin:1rem auto;}
 #log{font-size:.9rem;margin-top:.5rem;white-space:pre-wrap;}
+.tab-buttons{display:flex;justify-content:space-around;margin:1rem 0;}
+.tab-buttons button{width:48%;padding:.5rem;}
+.tab-content{display:none;}
+.tab-content.active{display:block;}
 </style>
 </head>
 <body>
 <h1>会員制QRチェックイン</h1>
 <div class="container">
-<h2>QRスキャンでチェックイン</h2>
-<video id="preview" autoplay playsinline></video>
-<p id="status">カメラ起動中...</p>
+
+<h2>チェックイン方法切替</h2>
+<div class="tab-buttons">
+  <button id="cameraTabBtn">カメラでスキャン</button>
+  <button id="imageTabBtn">画像でスキャン</button>
+</div>
+
+<div id="cameraTab" class="tab-content">
+  <video id="preview" autoplay playsinline></video>
+  <p id="statusCam">カメラ起動中...</p>
+</div>
+
+<div id="imageTab" class="tab-content">
+  <input type="file" id="fileInput" accept="image/*">
+</div>
+
 <hr>
 <h3>会員QR生成</h3>
 <input id="memberId" placeholder="会員ID（例：A001）">
@@ -28,19 +45,27 @@ canvas{display:block;margin:1rem auto;}
 <input id="eventName" placeholder="イベント名（例：秋祭り2025）">
 <button onclick="generateQR()">QRを生成</button>
 <canvas id="qrcanvas"></canvas>
-<hr>
-<h3>画像からQRスキャン</h3>
-<input type="file" id="fileInput" accept="image/*">
+
 <pre id="log"></pre>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
 <script>
-// 👇 GAS URL（あなたのものを使う）
 const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbyXE45-oFrH5JmhSMuW2iitVcW2VuBorR49hD8yIrVPd59HqxP7zttq2UJIQ8bTcbF9/exec";
-
 function log(t){document.getElementById("log").textContent += t + "\n";}
+
+// === タブ切替 ===
+const cameraTabBtn = document.getElementById("cameraTabBtn");
+const imageTabBtn = document.getElementById("imageTabBtn");
+const cameraTab = document.getElementById("cameraTab");
+const imageTab = document.getElementById("imageTab");
+
+cameraTabBtn.addEventListener("click",()=>{cameraTab.classList.add("active"); imageTab.classList.remove("active");});
+imageTabBtn.addEventListener("click",()=>{cameraTab.classList.remove("active"); imageTab.classList.add("active");});
+
+// 初期タブはカメラ
+cameraTab.classList.add("active");
 
 // === QR生成 ===
 function generateQR(){
@@ -53,64 +78,73 @@ function generateQR(){
   log("✅ QR生成: " + json);
 }
 
-// === Googleシート送信 ===
+// === Googleシート送信（重複チェック含む） ===
 async function sendToSheet(entry){
   try{
-    const res = await fetch(GOOGLE_SHEET_URL,{
+    // まずGETで既存データ取得
+    const resGet = await fetch(GOOGLE_SHEET_URL + "?action=get");
+    const existing = await resGet.json();
+    if(existing.some(r=>r.member_id===entry.member_id)){
+      statusCam.textContent = `⚠️ 既にチェックイン済み: ${entry.member_id}`;
+      log(`⚠️ ${entry.member_id} は既にチェックイン済み`);
+      return;
+    }
+    // 重複なければPOST
+    const resPost = await fetch(GOOGLE_SHEET_URL,{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify(entry)
     });
-    log("📤送信結果: " + await res.text());
+    log("📤送信結果: " + await resPost.text());
+    statusCam.textContent = `✅ チェックイン: ${entry.name} (${entry.member_id})`;
   }catch(e){
-    log("❌送信エラー: " + e);
+    log("❌ 送信エラー: " + e);
   }
 }
 
-// === カメラ起動とQR解析 ===
+// === カメラ ===
 const video=document.getElementById("preview");
-const canvas=document.createElement("canvas");
-const ctx=canvas.getContext("2d");
+const camCanvas=document.createElement("canvas");
+const camCtx=camCanvas.getContext("2d");
 
 async function startCamera(){
   try{
     const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
     video.srcObject=stream;
     video.play();
-    requestAnimationFrame(tick);
-    status.textContent="📷 カメラ起動成功";
+    requestAnimationFrame(camTick);
+    document.getElementById("statusCam").textContent="📷 カメラ起動成功";
   }catch(e){
-    status.textContent="❌ カメラ起動失敗: " + e;
+    document.getElementById("statusCam").textContent="❌ カメラ起動失敗: " + e;
   }
 }
 
-function tick(){
+function camTick(){
   if(video.readyState===video.HAVE_ENOUGH_DATA){
-    canvas.width=video.videoWidth;
-    canvas.height=video.videoHeight;
-    ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    const imgData=ctx.getImageData(0,0,canvas.width,canvas.height);
+    camCanvas.width=video.videoWidth;
+    camCanvas.height=video.videoHeight;
+    camCtx.drawImage(video,0,0,camCanvas.width,camCanvas.height);
+    const imgData=camCtx.getImageData(0,0,camCanvas.width,camCanvas.height);
     const code=jsQR(imgData.data,imgData.width,imgData.height);
-    if(code){
-      processQRCode(code.data);
-    }
+    if(code) processQRCode(code.data);
   }
-  requestAnimationFrame(tick);
+  requestAnimationFrame(camTick);
 }
 
-// === QRコード処理共通 ===
+// === QR共通処理 ===
 function processQRCode(qrText){
   try{
     const data=JSON.parse(qrText);
     const entry={member_id:data.id,name:data.name,event:data.event,status:"checked_in"};
     sendToSheet(entry);
-    status.textContent=`✅ チェックイン: ${data.name} (${data.id})`;
   }catch{
-    status.textContent="⚠️ 不正なQRです";
+    document.getElementById("statusCam").textContent="⚠️ 不正なQRです";
   }
 }
 
-// === 画像からQRスキャン ===
+// === 画像スキャン ===
+const imgCanvas = document.createElement("canvas");
+const imgCtx = imgCanvas.getContext("2d");
 document.getElementById("fileInput").addEventListener("change", function(e){
   const file = e.target.files[0];
   if(!file) return;
@@ -118,15 +152,20 @@ document.getElementById("fileInput").addEventListener("change", function(e){
   reader.onload = function() {
     const img = new Image();
     img.onload = function() {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img,0,0);
-      const imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
-      const code = jsQR(imgData.data,imgData.width,imgData.height);
-      if(code){
-        processQRCode(code.data);
-      } else {
-        log("⚠️ QRが見つかりませんでした");
+      imgCanvas.width = img.width;
+      imgCanvas.height = img.height;
+      imgCtx.drawImage(img,0,0);
+      try {
+        const imgData = imgCtx.getImageData(0,0,imgCanvas.width,imgCanvas.height);
+        const code = jsQR(imgData.data,imgData.width,imgData.height);
+        if(code){
+          processQRCode(code.data);
+          log("✅ 画像からQRスキャン成功");
+        } else {
+          log("⚠️ 画像からQRが見つかりませんでした");
+        }
+      } catch(err){
+        log("❌ 画像処理エラー: " + err);
       }
     };
     img.src = reader.result;
@@ -134,6 +173,7 @@ document.getElementById("fileInput").addEventListener("change", function(e){
   reader.readAsDataURL(file);
 });
 
+// カメラ起動
 startCamera();
 </script>
 </body>
